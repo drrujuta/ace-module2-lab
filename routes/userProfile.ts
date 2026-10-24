@@ -55,13 +55,13 @@ export function getUserProfile () {
       req.app.locals.abused_ssti_bug = true
       const code = username?.substring(2, username.length - 1)
       try {
-        if (!code) {
-          throw new Error('Username is null')
+        if (!code || !code.trim() || code.includes('#{') || code.includes('!{')) {
+          throw new Error('Username is null or unsafe')
         }
-        const singleQuoteRegex = /^'(?:[^'\\]|\\.)*'$/
-        const doubleQuoteRegex = /^"(?:[^"\\]|\\.)*"$/
-        const backtickRegex = /^`(?:[^`\\$]|\\.|\$(?!{))*`$/
-        const numericRegex = /^-?\d+(?:\.\d+)?$/
+        const singleQuoteRegex = /^'[^'\\#!\\r\\n]*'$/
+        const doubleQuoteRegex = /^"[^"\\#!\\r\\n]*"$/
+        const backtickRegex = /^`[^`\\#!\\$\\r\\n]*`$/
+        const numericRegex = /^[0-9+\\-*/%().\\s]+$/
         const booleanRegex = /^(?:true|false|null|undefined)$/
 
         const isSafe = singleQuoteRegex.test(code) ||
@@ -74,11 +74,14 @@ export function getUserProfile () {
           throw new Error('Unsafe code execution blocked')
         }
         username = eval(code) // eslint-disable-line no-eval
+        if (typeof username === 'string' && (username.includes('#{') || username.includes('!{') || username.includes('\\n') || username.includes('\\r'))) {
+          throw new Error('Unsafe code execution blocked')
+        }
       } catch (err) {
-        username = '\\' + username
+        username = username ? '\\' + username.replace(/([#!]\{)/g, (m, offset) => offset === 0 ? m : '\\' + m) : username
       }
     } else {
-      username = '\\' + username
+      username = username ? '\\' + username.replace(/([#!]\{)/g, (m, offset) => offset === 0 ? m : '\\' + m) : username
     }
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes
